@@ -1680,9 +1680,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.default.writeFileSync(audioFilePath, audioBuffer);
 
         // Create accessible URL
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN ? 
-          `https://${process.env.REPLIT_DEV_DOMAIN}` : 
-          `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+  // const baseUrl = process.env.CUSTOM_DOMAIN || 'https://ai-lead-generation-house.onrender.com';
+  const baseUrl = 'https://ai-lead-generation-house.onrender.com';
         const audioUrl = `${baseUrl}/audio/${audioFileName}`;
 
         console.log(`✅ ElevenLabs intro generated successfully: ${audioUrl}`);
@@ -1785,9 +1784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.writeFileSync(audioFilePath, audioBuffer);
 
         // Use same URL construction pattern as conversation responses for consistency
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN ? 
-          `https://${process.env.REPLIT_DEV_DOMAIN}` : 
-          `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+  const baseUrl = process.env.CUSTOM_DOMAIN || 'https://ai-lead-generation-house.onrender.com';
         const audioUrl = `${baseUrl}/audio/${audioFileName}`;
 
         console.log(`🔗 Created ElevenLabs intro audio URL: ${audioUrl}`);

@@ -264,9 +264,8 @@ export class CallManager {
         fs.default.writeFileSync(audioFilePath, audioBuffer);
 
         // Create accessible URL
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN ? 
-          `https://${process.env.REPLIT_DEV_DOMAIN}` : 
-          `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+  // const baseUrl = process.env.CUSTOM_DOMAIN || 'https://ai-lead-generation-house.onrender.com';
+  const baseUrl = 'https://ai-lead-generation-house.onrender.com';
         const audioUrl = `${baseUrl}/audio/${audioFileName}`;
 
         console.log(`✅ Using ElevenLabs voice: ${campaign.voiceId}, audio URL: ${audioUrl}`);
