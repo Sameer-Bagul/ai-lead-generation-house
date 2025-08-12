@@ -105,18 +105,18 @@ export class TwilioService {
 
         // Use Twilio Gather with speech recognition for direct OpenAI Whisper processing
         const gather = twiml.gather({
-          input: 'speech',
-          speechTimeout: 3, // Faster speech detection
+          input: ['speech'],
+          speechTimeout: '1', // Even faster speech detection
           speechModel: 'experimental_conversations',
           enhanced: true,
           language: options.language || 'en-US',
           action: options.action || '/api/calls/process-speech',
           method: 'POST',
-          timeout: 7 // Reduced overall timeout for faster flow
+          timeout: 4 // Shorter max time for faster flow
         });
 
-        // Add a pause to let user speak
-        gather.pause({ length: 1 });
+        // Add a minimal pause to let user speak
+        gather.pause({ length: 0.3 });
 
         // If no speech detected, redirect to continue listening
         twiml.redirect(options.action || '/api/calls/process-speech');

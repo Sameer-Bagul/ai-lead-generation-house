@@ -109,8 +109,10 @@ export class CallManager {
   async processSpeechInput(
     callId: string,
     speechText: string
-  ): Promise<{ twiml: string; success: boolean }> {
+  ): Promise<{ twiml: string; success: boolean; timings?: any }> {
     try {
+      const timings: any = {};
+      timings.start = Date.now();
       console.log(`🔍 Looking for active call: ${callId}`);
       console.log(`📊 Active calls count: ${this.activeCalls.size}`);
       console.log(`📋 Active call IDs: ${Array.from(this.activeCalls.keys()).join(', ')}`);
@@ -119,8 +121,11 @@ export class CallManager {
 
       // If call not in memory, try to reconstruct from database
       if (!activeCall) {
+        timings.reconstructStart = Date.now();
         console.log(`⚠️ Call ${callId} not found in active calls, reconstructing from database`);
         const dbCall = await storage.getCall(callId);
+        timings.reconstructEnd = Date.now();
+        timings.reconstructDurationMs = timings.reconstructEnd - timings.reconstructStart;
         if (dbCall && dbCall.status === 'active') {
           activeCall = {
             id: dbCall.id,
@@ -142,13 +147,17 @@ export class CallManager {
               language: 'en',
               voice: 'alice'
             }),
-            success: false
+            success: false,
+            timings
           };
         }
       }
 
+      timings.campaignFetchStart = Date.now();
       // Get campaign for script context
       const campaign = await storage.getCampaign(activeCall.campaignId);
+      timings.campaignFetchEnd = Date.now();
+      timings.campaignFetchDurationMs = timings.campaignFetchEnd - timings.campaignFetchStart;
       if (!campaign) {
         return {
           twiml: twilioService.generateTwiML('hangup', { 
@@ -156,7 +165,8 @@ export class CallManager {
             language: 'en',
             voice: 'alice'
           }),
-          success: false
+          success: false,
+          timings
         };
       }
 
@@ -168,10 +178,16 @@ export class CallManager {
       });
 
       // Extract contact information from speech (optimized for speed)
+      timings.extractContactInfoStart = Date.now();
       const contactInfo = directSpeechService.extractContactInfo(speechText);
+      timings.extractContactInfoEnd = Date.now();
+      timings.extractContactInfoDurationMs = timings.extractContactInfoEnd - timings.extractContactInfoStart;
 
       // Get current call data to check existing contact info
+      timings.callFetchStart = Date.now();
       const currentCall = await storage.getCall(callId);
+      timings.callFetchEnd = Date.now();
+      timings.callFetchDurationMs = timings.callFetchEnd - timings.callFetchStart;
       const hasContactInfo = {
         whatsapp: currentCall?.extractedWhatsapp || contactInfo.whatsapp,
         email: currentCall?.extractedEmail || contactInfo.email
@@ -179,14 +195,18 @@ export class CallManager {
 
       // Update call with any new contact info
       if (contactInfo.whatsapp || contactInfo.email) {
+        timings.updateContactInfoStart = Date.now();
         await storage.updateCall(callId, {
           extractedWhatsapp: hasContactInfo.whatsapp,
           extractedEmail: hasContactInfo.email
         });
+        timings.updateContactInfoEnd = Date.now();
+        timings.updateContactInfoDurationMs = timings.updateContactInfoEnd - timings.updateContactInfoStart;
         console.log(`✅ Updated contact info - WhatsApp: ${hasContactInfo.whatsapp}, Email: ${hasContactInfo.email}`);
       }
 
       // Generate AI response quickly using campaign settings
+      timings.openaiStart = Date.now();
       const aiResult = await OpenAIService.generateResponse(
         speechText,
         campaign.script || campaign.aiPrompt,
@@ -197,6 +217,8 @@ export class CallManager {
         hasContactInfo,
         campaign.openaiModel
       );
+      timings.openaiEnd = Date.now();
+      timings.openaiDurationMs = timings.openaiEnd - timings.openaiStart;
 
       const aiResponse = aiResult.response;
 
@@ -208,6 +230,7 @@ export class CallManager {
       });
 
       // Save conversation to database
+      timings.saveMessagesStart = Date.now();
       try {
         await storage.createCallMessage({
           callId,
@@ -219,8 +242,12 @@ export class CallManager {
           role: 'assistant', 
           content: aiResponse
         });
+        timings.saveMessagesEnd = Date.now();
+        timings.saveMessagesDurationMs = timings.saveMessagesEnd - timings.saveMessagesStart;
         console.log('✅ Messages saved to database successfully');
       } catch (dbError) {
+        timings.saveMessagesEnd = Date.now();
+        timings.saveMessagesDurationMs = timings.saveMessagesEnd - timings.saveMessagesStart;
         console.error('❌ Database save error:', dbError);
       }
 
@@ -238,6 +265,7 @@ export class CallManager {
       let twiml;
 
       try {
+        timings.elevenlabsStart = Date.now();
         console.log(`🎤 Generating ElevenLabs audio with campaign voice: ${campaign.voiceId}`);
         const voiceConfig = campaign.voiceConfig as any;
         const audioBuffer = await ElevenLabsService.textToSpeech(
@@ -251,8 +279,11 @@ export class CallManager {
             model: campaign.elevenlabsModel || 'eleven_turbo_v2'
           }
         );
+        timings.elevenlabsEnd = Date.now();
+        timings.elevenlabsDurationMs = timings.elevenlabsEnd - timings.elevenlabsStart;
 
         // Save audio file temporarily
+        timings.saveAudioStart = Date.now();
         const fs = await import('fs');
         const path = await import('path');
         const audioFileName = `response_${callId}_${Date.now()}.mp3`;
@@ -262,14 +293,19 @@ export class CallManager {
         }
         const audioFilePath = path.default.join(tempDir, audioFileName);
         fs.default.writeFileSync(audioFilePath, audioBuffer);
+        timings.saveAudioEnd = Date.now();
+        timings.saveAudioDurationMs = timings.saveAudioEnd - timings.saveAudioStart;
 
         // Create accessible URL
-  // const baseUrl = process.env.CUSTOM_DOMAIN || 'https://ai-lead-generation-house.onrender.com';
-  const baseUrl = 'https://ai-lead-generation-house.onrender.com';
+        timings.audioUrlCreateStart = Date.now();
+        const baseUrl = 'https://ai-lead-generation-house.onrender.com';
         const audioUrl = `${baseUrl}/audio/${audioFileName}`;
+        timings.audioUrlCreateEnd = Date.now();
+        timings.audioUrlCreateDurationMs = timings.audioUrlCreateEnd - timings.audioUrlCreateStart;
 
         console.log(`✅ Using ElevenLabs voice: ${campaign.voiceId}, audio URL: ${audioUrl}`);
 
+        timings.twimlGenStart = Date.now();
         if (shouldEndCall) {
           twiml = twilioService.generateTwiML('hangup', {
             audioUrl: audioUrl, // Use ElevenLabs audio
@@ -288,8 +324,12 @@ export class CallManager {
             addThinkingPause: true
           });
         }
+        timings.twimlGenEnd = Date.now();
+        timings.twimlGenDurationMs = timings.twimlGenEnd - timings.twimlGenStart;
 
       } catch (elevenlabsError) {
+        timings.elevenlabsEnd = Date.now();
+        timings.elevenlabsDurationMs = timings.elevenlabsEnd - timings.elevenlabsStart;
         console.error('❌ ElevenLabs TTS failed - maintaining voice consistency, no fallback:', elevenlabsError);
 
         // No fallback to maintain voice consistency - end call gracefully
@@ -301,10 +341,33 @@ export class CallManager {
         setTimeout(() => this.completeCall(callId), 1000);
       }
 
+      timings.end = Date.now();
+      timings.totalDurationMs = timings.end - timings.start;
+
       // Broadcast real-time update
       this.broadcastCallUpdate(activeCall);
 
-      return { twiml, success: true };
+      // Log timing data to server logs for Render dashboard visibility
+      const timingKeys = Object.keys(timings).filter(k => k.endsWith('DurationMs') || k === 'totalDurationMs');
+      const timingSummary = timingKeys.map(k => `${k}: ${timings[k]}`).join(', ');
+      const logEntry = `[CALL TIMINGS] CallId: ${callId} | ${new Date().toISOString()} | ${timingSummary}`;
+      console.log(logEntry);
+
+      // Also write to a separate file for local/dev analysis
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const logDir = path.default.join(process.cwd(), 'temp');
+        if (!fs.default.existsSync(logDir)) {
+          fs.default.mkdirSync(logDir, { recursive: true });
+        }
+        const logFile = path.default.join(logDir, 'call-timings.txt');
+        fs.default.appendFileSync(logFile, logEntry + '\n');
+      } catch (logError) {
+        console.error('❌ Error saving timing logs:', logError);
+      }
+
+      return { twiml, success: true, timings };
     } catch (error) {
       console.error('❌ Error processing speech input:', error);
       console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
@@ -314,7 +377,8 @@ export class CallManager {
           language: 'en', // Default language for error cases
           voice: 'alice'
         }),
-        success: false
+        success: false,
+        timings: { error: true }
       };
     }
   }

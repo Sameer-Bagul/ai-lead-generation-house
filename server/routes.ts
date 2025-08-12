@@ -749,6 +749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Start campaign with specific contacts
   app.post("/api/campaigns/start", async (req, res) => {
     try {
+      const campaignStartTime = Date.now();
       console.log('🚀 CAMPAIGN START ENDPOINT CALLED');
       console.log('📊 Request body:', req.body);
       
@@ -818,11 +819,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let processedCount = 0;
       const results = [];
+      const stepTimings: any[] = [];
 
       // Process each contact with delays for WhatsApp campaigns
       for (let i = 0; i < contactIds.length; i++) {
         const contactId = contactIds[i];
         try {
+          const contactStartTime = Date.now();
           // Get contact details
           const contact = await storage.getContact(contactId);
           if (!contact) {
@@ -837,15 +840,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (channel === 'CALL' || channel === 'BOTH') {
             // Start AI call
             try {
+              const callStartTime = Date.now();
               console.log(`📞 Starting AI call for ${contact.phone}`);
-              
               // Import callManager dynamically
               const { callManager } = await import('./services/callManager');
               const callResult = await callManager.startCall(contactId, campaignId, contact.phone);
-              
+              const callEndTime = Date.now();
+              stepTimings.push({ contactId, step: 'callManager.startCall', durationMs: callEndTime - callStartTime });
               if (callResult.success) {
-                console.log(`✅ Call initiated for ${contact.phone}: ${callResult.callId}`);
-                results.push({ contactId, status: 'call_started', callId: callResult.callId });
+                console.log(`✅ Call initiated for ${contact.phone}: ${callResult.callId} (Duration: ${callEndTime - callStartTime}ms)`);
+                results.push({ contactId, status: 'call_started', callId: callResult.callId, callDurationMs: callEndTime - callStartTime });
               } else {
                 console.log(`❌ Call failed for ${contact.phone}: ${callResult.error}`);
                 results.push({ contactId, status: 'call_failed', error: callResult.error });
@@ -955,14 +959,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const campaignEndTime = Date.now();
       const campaignResult = {
         success: true,
         campaignId,
         contactsProcessed: processedCount,
         totalContacts: contactIds.length,
-        results
+        results,
+        stepTimings,
+        totalDurationMs: campaignEndTime - campaignStartTime
       };
-
       console.log('✅ Campaign completed:', campaignResult);
       res.json(campaignResult);
     } catch (error) {
