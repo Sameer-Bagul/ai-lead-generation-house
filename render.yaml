@@ -1,0 +1,56 @@
+# Render Blueprint for WhatsApp Messaging Platform
+services:
+  - type: web
+    name: whatsapp-messaging-platform
+    runtime: node
+    repo: https://github.com/yourusername/whatsapp-messaging-platform.git # Update with your repo
+    plan: starter # Free tier, upgrade to standard for production
+    region: oregon # Choose your preferred region
+    branch: main
+    rootDir: .
+    
+    # Build configuration
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    
+    # Environment configuration
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CUSTOM_DOMAIN
+        sync: false # Set manually in Render dashboard
+      - key: DATABASE_URL
+        fromDatabase:
+          name: whatsapp-messaging-db
+          property: connectionString
+      - key: TWILIO_ACCOUNT_SID
+        sync: false # Set manually for security
+      - key: TWILIO_AUTH_TOKEN
+        sync: false # Set manually for security
+      - key: TWILIO_PHONE_NUMBER
+        sync: false # Set manually for security
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false # Set manually for security
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false # Set manually for security
+      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        sync: false # Set manually for security
+      - key: OPENAI_API_KEY
+        sync: false # Set manually for security
+      - key: ELEVENLABS_API_KEY
+        sync: false # Set manually for security
+      - key: SESSION_SECRET
+        generateValue: true # Render will generate a secure secret
+        
+    # Health check
+    healthCheckPath: /api/health
+    
+  # Database service
+  - type: pserv
+    name: whatsapp-messaging-db
+    databaseName: whatsapp_messaging
+    user: app_user
+    plan: free # Free tier, upgrade for production
+    region: oregon # Same region as web service
